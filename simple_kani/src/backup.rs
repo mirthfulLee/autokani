@@ -54,6 +54,15 @@ pub fn slice_input2(stream: &[i32; 10]) {
     let _ = stream;
 }
 
+#[kani_test]
+pub fn slice_input2(stream: &mut [i32]) {
+    let _ = stream;
+}
+
+#[kani_test]
+pub fn slice_input3(stream: &[i32]) {
+    let _ = stream;
+}
 
 //// Tuple //////////////////////////////////////////////
 
