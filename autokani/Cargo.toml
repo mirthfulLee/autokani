@@ -1,0 +1,12 @@
+[package]
+name = "autokani"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true  # 声明这是一个过程宏 crate
+
+[dependencies]
+syn = {version="1.0.38", features=["full"]}
+quote = "1.0.38"
+proc-macro2 = "1.0.38"
