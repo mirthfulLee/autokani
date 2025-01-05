@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, FnArg, Ident, Item, ItemFn, Pat, Path, Type, TypeReference};
+use syn::{parse_macro_input, FnArg, Ident, Item, ItemFn, Pat, Path, Type, TypeReference, TypePtr};
 
 #[proc_macro_attribute]
 pub fn kani_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -125,7 +125,6 @@ fn init_for_type(arg_name: &str, arg_type: &Type, is_mut: bool) -> proc_macro2::
         Type::Slice(type_slice) => {
             let slice_type = &type_slice.elem;
             quote! {
-                // let #mutability #arg_ident = kani::vec::any_vec::<#slice_type, #ARR_LIMIT>();
                 let #mutability #arg_ident = kani::any::<[#slice_type; #ARR_LIMIT]>();
             }
         }
@@ -166,15 +165,14 @@ fn init_for_type(arg_name: &str, arg_type: &Type, is_mut: bool) -> proc_macro2::
                 },
             }
         }
-        // Type::Ptr(type_ptr) => {
-        //     let ptr_type = &type_ptr.elem;
-        //     let obj_name = quote::format_ident!("{}_obj", arg_ident);
-        //     let obj_init = init_for_type(&obj_name.to_string(), ptr_type, is_mut);
-        //     quote! {
-        //         #obj_init
-        //         let #mutability #arg_ident = &mut #obj_name as *mut _;
-        //     }
-        // }
+        Type::Ptr(TypePtr {
+            elem,const_token, mutability, ..
+        }) => {
+            quote! {
+                let mut generator = kani::PointerGenerator::<{std::mem::size_of::<#elem>()}>::new();
+                let #arg_ident: *#const_token #mutability #elem = generator.any_alloc_status().ptr;
+            }
+        }
         _ => quote! {
             compile_error!("Unsupported argument type for `kani_test` macro.");
         },

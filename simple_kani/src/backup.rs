@@ -149,6 +149,15 @@ pub fn initialize_prefix(length: usize, buffer: &mut [u8]) {
 
 //// Raw Pointer //////////////////////////////////////////////
 
+#[kani_test]
+pub fn ptr_input(s: *const u32) {
+    let _ = s;
+}
+#[kani_test]
+pub fn ptr_input2(s: *mut u32, i:u32) {
+    let _ = s;
+    let _ = unsafe { *s = i };
+}
 
 
 //// Structs //////////////////////////////////////////////
