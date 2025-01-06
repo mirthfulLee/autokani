@@ -1,9 +1,9 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, token::Mut, FieldsNamed, FnArg, Ident, ImplItem, ImplItemMethod, Item,
-    ItemFn, ItemImpl, ItemStruct, Pat, Path, Receiver, ReturnType, Type, TypeArray, TypePath,
-    TypePtr, TypeReference, TypeSlice, TypeTuple,
+    parse_macro_input, token::Mut, AngleBracketedGenericArguments, FieldsNamed, FnArg, Ident,
+    ImplItem, ImplItemMethod, Item, ItemFn, ItemImpl, ItemStruct, Pat, Path, Receiver, ReturnType,
+    Type, TypeArray, TypePath, TypePtr, TypeReference, TypeSlice, TypeTuple,
 };
 
 const ARR_LIMIT: usize = 16;
@@ -132,6 +132,50 @@ impl ArbitraryInit for TypePath {
                         }
                     }
                     _ => error_msg("Unsupported Vec Pattern"),
+                }
+            } else if final_seg.ident == "Option" {
+                let option_type = inner_type.clone();
+                match option_type {
+                    syn::PathArguments::AngleBracketed(args) => {
+                        if let Some(syn::GenericArgument::Type(ty)) = args.args.first() {
+                            let init_stmt = ty.init_for_type(arg_name, mutability);
+                            quote! {
+                                let #mutability #arg_ident = if kani::any::<bool>() {
+                                    #init_stmt
+                                    Some(#arg_ident)
+                                } else {
+                                    None
+                                };
+                            }
+                        } else {
+                            error_msg("Unsupported Option Type")
+                        }
+                    }
+                    _ => error_msg("Unsupported Option Pattern"),
+                }
+            } else if final_seg.ident == "Result" {
+                let result_type = inner_type.clone();
+                match result_type {
+                    syn::PathArguments::AngleBracketed(AngleBracketedGenericArguments{args,..}) => {
+                        let ok_init = match args.first() {
+                            Some(syn::GenericArgument::Type(ty)) => ty.init_for_type(arg_name, mutability),
+                            _ => error_msg("Unsupported Result Type"),
+                        };
+                        let err_init = match args.last() {
+                            Some(syn::GenericArgument::Type(ty)) => ty.init_for_type(arg_name, mutability),
+                            _ => error_msg("Unsupported Result Type"),
+                        };
+                        quote! {
+                            let #mutability #arg_ident = if kani::any::<bool>() {
+                                #ok_init
+                                Ok(#arg_ident)
+                            } else {
+                                #err_init
+                                Err(#arg_ident)
+                            };
+                        }
+                    }
+                    _ => error_msg("Unsupported Result Pattern"),
                 }
             } else {
                 // both typical types and user-defined structs are handled here

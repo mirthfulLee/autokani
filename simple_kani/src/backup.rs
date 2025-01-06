@@ -227,4 +227,36 @@ pub fn get_sound1(arr: &Array, index: usize) -> Option<i32> {
 
 //// Result and Option //////////////////////////////////////////////
 
-
+#[kani_test]
+pub fn option_input(a: (i16, u8), b: &mut f32, v: Option<i32>) {
+    *b += 1.0;
+    let y = a.1 + *b as u8;
+    match v {
+        Some(mut v) => {
+            v += y as i32;
+        }
+        None => {}
+    }
+}
+#[kani_test]
+pub fn option_input1(a: (i16, u8), b: &mut f32, v: Option<Vec<i32>>) {
+    *b += 1.0;
+    let y = a.1 + *b as u8;
+    match v {
+        Some(mut v) => {
+            v[y as usize] = 0;
+        }
+        None => {}
+    }
+}
+#[kani_test]
+pub fn result_input(a: (i16, u8), b: &mut f32, v: &mut Result<Vec<i32>, i32>) {
+    *b += 1.0;
+    let y = a.1 + *b as u8;
+    match v {
+        Ok(ref mut v) => {
+            v[y as usize] = 0;
+        }
+        Err(_) => {}
+    }
+}
