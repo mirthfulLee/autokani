@@ -162,12 +162,13 @@ pub fn ptr_input2(s: *mut u32, i:u32) {
 
 //// Structs //////////////////////////////////////////////
 
+// #[kani_arbitrary]
 pub struct Array {
     data: Vec<i32>,
     len: usize,
     capacity: usize,
 }
-
+#[extend_arbitrary]
 impl Array {
     pub fn new(cap: usize) -> Self {
         Array {
@@ -176,6 +177,7 @@ impl Array {
             capacity: cap,
         }
     }
+
     pub fn push(&mut self, val: i32) {
         if self.len == self.capacity {
             return;
@@ -195,13 +197,34 @@ impl Array {
     pub unsafe fn get_unchecked(&self, index: usize) -> i32 {
         *self.data.get_unchecked(index)
     }
+    #[kani_test]
+    pub fn get_unsound(&self, index: usize) -> Option<i32> {
+        Some(unsafe { self.get_unchecked(index) })
+    }
+    #[kani_test]
+    pub fn get_sound(&self, index: usize) -> Option<i32> {
+        if index >= self.len {
+            return None;
+        }
+        Some(unsafe { self.get_unchecked(index) })
+    }
 }
-pub fn get_unsound(arr: &Array, index: usize) -> Option<i32> {
+#[kani_test]
+pub fn get_unsound1(arr: &Array, index: usize) -> Option<i32> {
     Some(unsafe { arr.get_unchecked(index) })
 }
-pub fn get_sound(arr: &Array, index: usize) -> Option<i32> {
+#[kani_test]
+pub fn get_sound1(arr: &Array, index: usize) -> Option<i32> {
     if index >= arr.len {
         return None;
     }
     Some(unsafe { arr.get_unchecked(index) })
 }
+
+//// Unnamed Struct //////////////////////////////////////////////
+
+
+
+//// Result and Option //////////////////////////////////////////////
+
+

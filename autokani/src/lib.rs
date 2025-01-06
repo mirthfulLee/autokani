@@ -1,8 +1,9 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, token::Mut, FieldsNamed, FnArg, Ident, Item, ItemFn, ItemStruct, Pat, Path,
-    Receiver, Type, TypeArray, TypePath, TypePtr, TypeReference, TypeSlice, TypeTuple,
+    parse_macro_input, token::Mut, FieldsNamed, FnArg, Ident, ImplItem, ImplItemMethod, Item,
+    ItemFn, ItemImpl, ItemStruct, Pat, Path, Receiver, ReturnType, Type, TypeArray, TypePath,
+    TypePtr, TypeReference, TypeSlice, TypeTuple,
 };
 
 const ARR_LIMIT: usize = 16;
@@ -69,6 +70,13 @@ pub fn kani_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
         pub fn #harness_name() {
             #(#harness_body)*
         }
+        // Used for Debugging
+        #[cfg(all(not(kani), debug_assertions))]
+        #[kani::proof]
+        #[kani::unwind(64)]
+        pub fn #harness_name() {
+            #(#harness_body)*
+        }
     };
     let output = quote! {
         #func
@@ -79,11 +87,7 @@ pub fn kani_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 impl ArbitraryInit for Receiver {
-    fn init_for_type(
-        &self,
-        arg_name: &str,
-        mutability: &Option<Mut>,
-    ) -> proc_macro2::TokenStream {
+    fn init_for_type(&self, arg_name: &str, mutability: &Option<Mut>) -> proc_macro2::TokenStream {
         let arg_ident = quote::format_ident!("{}", arg_name);
         let init_stmt = quote! {
             let #mutability #arg_ident: Self = kani::any();
@@ -103,7 +107,7 @@ impl ArbitraryInit for TypePath {
     fn init_for_type(&self, arg_name: &str, mutability: &Option<Mut>) -> proc_macro2::TokenStream {
         // TODO: support Enum types
         let arg_ident = quote::format_ident!("{}", arg_name);
-        if self.path.is_ident("u32") || self.path.is_ident("u64") {
+        if self.path.is_ident("u32") || self.path.is_ident("u64") || self.path.is_ident("usize") {
             quote! {
                 let #mutability #arg_ident = kani::any();
                 kani::assume(#arg_ident < 100000000);
@@ -274,7 +278,7 @@ pub fn kani_arbitrary(_attr: TokenStream, item: TokenStream) -> TokenStream {
             .into();
         }
     };
-    let impl_stmt = impl_arbitrary_for_struct(&struct_def);
+    let impl_stmt = impl_arbitrary_via_fields(&struct_def);
     let output = quote! {
         #struct_def
 
@@ -283,7 +287,7 @@ pub fn kani_arbitrary(_attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
-fn impl_arbitrary_for_struct(struct_def: &ItemStruct) -> proc_macro2::TokenStream {
+fn impl_arbitrary_via_fields(struct_def: &ItemStruct) -> proc_macro2::TokenStream {
     let mutability: Option<Mut> = None;
     let struct_name = &struct_def.ident;
     let init_stmt = match &struct_def.fields {
@@ -323,4 +327,100 @@ fn impl_arbitrary_for_struct(struct_def: &ItemStruct) -> proc_macro2::TokenStrea
             }
         }
     }
+}
+
+#[proc_macro_attribute]
+pub fn extend_arbitrary(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as Item);
+    let impl_block = match input {
+        Item::Impl(impl_block) => impl_block,
+        _ => {
+            return quote! {
+                compile_error!("`extend_arbitrary` can only be used on impl blocks.");
+            }
+            .into();
+        }
+    };
+    let impl_stmt = impl_arbitrary_via_constructor(&impl_block);
+    let output = quote! {
+        #impl_block
+        #impl_stmt
+    };
+    output.into()
+}
+
+fn find_constructor(impl_block: &ItemImpl, struct_name: &Ident) -> Option<ImplItemMethod> {
+    for item in &impl_block.items {
+        if let ImplItem::Method(method) = item {
+            // if method.sig.ident == "new" {
+            //     return method.clone();
+            // }
+            if let ReturnType::Type(_, return_type) = &method.sig.output {
+                if let Type::Path(type_path) = &**return_type {
+                    if type_path.path.is_ident(struct_name) || type_path.path.is_ident("Self") {
+                        return Some(method.clone());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn impl_arbitrary_via_constructor(impl_block: &ItemImpl) -> Option<proc_macro2::TokenStream> {
+    // This function should generate the `Arbitrary` impl block based on the `new` method.
+    // You need to parse the `new` method and generate the corresponding `Arbitrary` impl block.
+    let struct_name = match &*impl_block.self_ty {
+        Type::Path(type_path) => type_path.path.get_ident()?,
+        _ => {
+            return quote! {
+                compile_error!("`extend_arbitrary` can only be used on impl blocks of structs.");
+            }
+            .into();
+        }
+    };
+    let constructor = find_constructor(impl_block, struct_name)?;
+    let inputs = &constructor.sig.inputs;
+    let func_name = &constructor.sig.ident;
+    let mut init_code = Vec::new();
+    let mut call_args: Vec<proc_macro2::TokenStream> = Vec::new();
+
+    for arg in inputs {
+        match arg {
+            FnArg::Receiver(_) => unreachable!(),
+            FnArg::Typed(pat_type) => {
+                let arg_name = match &*pat_type.pat {
+                    syn::Pat::Ident(pat_ident) => pat_ident.ident.to_string(),
+                    _ => "arg".to_string(),
+                };
+                let arg_type = &pat_type.ty;
+                let mutability = match &*pat_type.pat {
+                    Pat::Ident(pat_ident) => pat_ident.mutability,
+                    _ => None,
+                };
+                let init_stmt = arg_type.init_for_type(&arg_name, &mutability);
+                init_code.push(init_stmt);
+
+                let arg_ident = quote::format_ident!("{}", arg_name);
+                call_args.push(quote! { #arg_ident });
+            }
+        }
+    }
+    Some(quote! {
+        #[cfg(kani)]
+        impl kani::Arbitrary for #struct_name {
+            fn any() -> Self {
+                #(#init_code)*
+                Self::#func_name(#(#call_args),*)
+            }
+        }
+        // Used for Debugging
+        #[cfg(all(not(kani), debug_assertions))]
+        impl kani::Arbitrary for #struct_name {
+            fn any() -> Self {
+                #(#init_code)*
+                Self::#func_name(#(#call_args),*)
+            }
+        }
+    })
 }
