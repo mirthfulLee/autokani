@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     parse_macro_input, token::Mut, FieldsNamed, FnArg, Ident, Item, ItemFn, ItemStruct, Pat, Path,
-    Type, TypeArray, TypePath, TypePtr, TypeReference, TypeSlice, TypeTuple,
+    Receiver, Type, TypeArray, TypePath, TypePtr, TypeReference, TypeSlice, TypeTuple,
 };
 
 const ARR_LIMIT: usize = 16;
@@ -27,42 +27,45 @@ pub fn kani_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let harness_name = quote::format_ident!("check_{}", func_name);
     let mut harness_body = Vec::new();
     let mut call_args: Vec<proc_macro2::TokenStream> = Vec::new();
+    let mut call_path: Vec<proc_macro2::TokenStream> = Vec::new();
 
     for arg in inputs {
-        if let FnArg::Typed(pat_type) = arg {
-            let arg_name = match &*pat_type.pat {
-                syn::Pat::Ident(pat_ident) => pat_ident.ident.to_string(),
-                _ => "arg".to_string(),
-            };
-            let arg_type = &pat_type.ty;
-            // let is_mut = matches!(&*pat_type.pat, syn::Pat::Ident(pat_ident) if pat_ident.mutability.is_some());
-            let mutability = match &*pat_type.pat {
-                Pat::Ident(pat_ident) => pat_ident.mutability,
-                _ => None,
-            };
-            let init_stmt = arg_type.init_for_type(&arg_name, &mutability);
-            harness_body.push(init_stmt);
+        match arg {
+            FnArg::Receiver(receiver) => {
+                let arg_placeholder = "self_receiver";
+                let init_stmt = receiver.init_for_type(arg_placeholder, &receiver.mutability);
+                harness_body.push(init_stmt);
+                let receiver_ident = quote::format_ident!("{}", arg_placeholder);
+                call_path.push(quote! { #receiver_ident });
+            }
+            FnArg::Typed(pat_type) => {
+                let arg_name = match &*pat_type.pat {
+                    syn::Pat::Ident(pat_ident) => pat_ident.ident.to_string(),
+                    _ => "arg".to_string(),
+                };
+                let arg_type = &pat_type.ty;
+                let mutability = match &*pat_type.pat {
+                    Pat::Ident(pat_ident) => pat_ident.mutability,
+                    _ => None,
+                };
+                let init_stmt = arg_type.init_for_type(&arg_name, &mutability);
+                harness_body.push(init_stmt);
 
-            let arg_ident = quote::format_ident!("{}", arg_name);
-            call_args.push(quote! { #arg_ident });
+                let arg_ident = quote::format_ident!("{}", arg_name);
+                call_args.push(quote! { #arg_ident });
+            }
         }
     }
+    call_path.push(quote! { #func_name });
 
     let call_stmt = quote! {
-        let _ = #func_name(#(#call_args),*);
+        let _ = #(#call_path).*(#(#call_args),*);
     };
     harness_body.push(call_stmt);
-    #[cfg(kani)]
     let harness_code = quote! {
         #[cfg(kani)]
         #[kani::proof]
         #[kani::unwind(64)]
-        pub fn #harness_name() {
-            #(#harness_body)*
-        }
-    };
-    #[cfg(not(kani))]
-    let harness_code = quote! {
         pub fn #harness_name() {
             #(#harness_body)*
         }
@@ -73,6 +76,27 @@ pub fn kani_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #harness_code
     };
     output.into()
+}
+
+impl ArbitraryInit for Receiver {
+    fn init_for_type(
+        &self,
+        arg_name: &str,
+        mutability: &Option<Mut>,
+    ) -> proc_macro2::TokenStream {
+        let arg_ident = quote::format_ident!("{}", arg_name);
+        let init_stmt = quote! {
+            let #mutability #arg_ident: Self = kani::any();
+        };
+        // match self.reference {
+        //     Some(_) => quote! {
+        //         #init_stmt
+        //         let #arg_ident = &#mutability #arg_ident;
+        //     },
+        //     None => init_stmt,
+        // }
+        init_stmt
+    }
 }
 
 impl ArbitraryInit for TypePath {
@@ -292,6 +316,7 @@ fn impl_arbitrary_for_struct(struct_def: &ItemStruct) -> proc_macro2::TokenStrea
         }
     };
     quote! {
+        #[cfg(kani)]
         impl kani::Arbitrary for #struct_name {
             fn any() -> Self {
                 #init_stmt
