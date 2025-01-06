@@ -1,86 +1,76 @@
 // mod aaa;
 // mod backup;
 
-use autokani::kani_test;
+use autokani::{kani_test, kani_arbitrary};
 
+#[kani_arbitrary]
+pub struct Array {
+    data: Vec<i32>,
+    len: usize,
+    capacity: usize,
+}
 
-
-
+impl Array {
+    pub fn new(cap: usize) -> Self {
+        Array {
+            data: Vec::with_capacity(cap),
+            len: 0,
+            capacity: cap,
+        }
+    }
+    pub fn push(&mut self, val: i32) {
+        if self.len == self.capacity {
+            return;
+        }
+        self.data.push(val);
+        self.len += 1;
+    }
+    pub fn pop(&mut self) -> Option<i32> {
+        if self.len == 0 {
+            return None;
+        }
+        self.len -= 1;
+        self.data.pop()
+    }
+    /// # Safety
+    /// This function is unsafe because it doesn't check if the index is out of bounds.
+    pub unsafe fn get_unchecked(&self, index: usize) -> i32 {
+        *self.data.get_unchecked(index)
+    }
+    // #[kani_test]
+    pub fn get_unsound(&self, index: usize) -> Option<i32> {
+        Some(unsafe { self.get_unchecked(index) })
+    }
+}
 // #[kani_test]
-// pub fn multi_param1(a: (i16, u8), b: f32, v: Vec<String>) {
-//     let y = a.1 + b as u8;
-//     let _ = v[y as usize];
-// }
-
+pub fn get_unsound1(arr: &Array, index: usize) -> Option<i32> {
+    Some(unsafe { arr.get_unchecked(index) })
+}
 // #[kani_test]
-// pub fn digit_to_char(digit: u32) -> u8 {
-//     const TABLE: [u8; 10] = [
-//         b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9'
-//     ];
-//     unsafe { *TABLE.get_unchecked(digit as usize) }
-// }
-// #[kani_test]
-// pub fn digit_to_char1(digit: &u32) -> u8 {
-//     const TABLE: [u8; 10] = [
-//         b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9'
-//     ];
-//     // *digit %= 100;
-//     unsafe { *TABLE.get_unchecked(*digit as usize) }
-// }
+pub fn get_sound(arr: &Array, index: usize) -> Option<i32> {
+    if index >= arr.len {
+        return None;
+    }
+    Some(unsafe { arr.get_unchecked(index) })
+}
 
 #[cfg(kani)]
 mod verification {
     use super::*;
 
-    // #[kani::proof]
-    // pub fn test_slice_input() {
-    //     let mut stream_obj = kani::any::<[i32; 16usize]>();
-    //     let mut stream = kani::slice::any_slice_of_array_mut(&mut stream_obj);
-    //     let _ = slice_input2(stream);
-    // }
+    #[kani::proof]
+    pub fn test_get_unsound() {
+        // let mut arr = Array::new(16);
+        let arr = kani::any::<Array>();
+        let index = kani::any::<usize>();
+        let _ = get_unsound1(&arr, index);
+    }
 
     // #[kani::proof]
-    // pub fn test_slice_input2() {
-    //     let mut stream_obj = kani::vec::any_vec::<i32, 16usize>();
-    //     let mut slice = stream_obj.as_mut_slice();
-    //     let mut stream = kani::slice::any_slice_of_array_mut(&mut slice);
-    //     let _ = slice_input2(stream);
-    // }
-
-    // #[kani::proof]
-    // pub fn test_u8_input() {
-    //     let mut s_obj: u8 = kani::any();
-    //     let mut s = &mut s_obj;
-    //     let _ = u8_input(s);
-    // }
-    // #[kani::proof]
-    // fn test_char_to_str() {
-    //     const LEN: usize = 10;
-    //     let stream = kani::any::<[u8; LEN]>();
-    //     let _ = char_to_str(&stream);
-    // }
-
-    // #[kani::proof]
-    // fn test_digit_to_char() {
-    //     let digit = kani::any::<u32>();
-    //     kani::assume(digit < 100000000);
-    //     let _ = digit_to_char(digit);
-    // }
-
-    // #[kani::proof]
-    // fn test_digit_to_char1() {
-    //     let digit_obj = kani::any();
-    //     kani::assume(digit_obj < 1000000);
-    //     let digit = &digit_obj;
-    //     let _ = digit_to_char1(digit);
-    // }
-
-    // #[kani::proof]
-    // #[kani::unwind(100)]
-    // fn test_str_input() {
-    //     let char_arr = kani::any::<[char; 10]>();
-    //     let s = String::from_iter(char_arr);
-    //     let _ = str_input(s);
+    // pub fn test_ptr_input() {
+    //     let mut generator = kani::PointerGenerator::<{std::mem::size_of::<u32>()}>::new();
+    //     let ptr2: *const u32 = generator.any_alloc_status().ptr;
+    //     let _ = ptr_input(ptr2);
     // }
 }
 
