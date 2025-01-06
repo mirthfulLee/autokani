@@ -10,16 +10,19 @@ const ARR_LIMIT: usize = 16;
 trait ArbitraryInit {
     fn init_for_type(&self, arg_name: &str, mutability: &Option<Mut>) -> proc_macro2::TokenStream;
 }
+
+fn error_msg(msg: &str) -> proc_macro2::TokenStream {
+    quote! {
+        compile_error!(#msg);
+    }
+}
 #[proc_macro_attribute]
 pub fn kani_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as Item);
     let func = match input {
         Item::Fn(func) => func,
         _ => {
-            return quote! {
-                compile_error!("`kani_test` can only be used on functions.");
-            }
-            .into();
+            return error_msg("`kani_test` can only be used on functions.").into();
         }
     };
 
@@ -92,13 +95,6 @@ impl ArbitraryInit for Receiver {
         let init_stmt = quote! {
             let #mutability #arg_ident: Self = kani::any();
         };
-        // match self.reference {
-        //     Some(_) => quote! {
-        //         #init_stmt
-        //         let #arg_ident = &#mutability #arg_ident;
-        //     },
-        //     None => init_stmt,
-        // }
         init_stmt
     }
 }
@@ -132,14 +128,10 @@ impl ArbitraryInit for TypePath {
                                 let #mutability #arg_ident = kani::vec::any_vec::<#ty, #ARR_LIMIT>();
                             }
                         } else {
-                            quote! {
-                                compile_error!("Unsupported Vec Type");
-                            }
+                            error_msg("Unsupported Vec Type")
                         }
                     }
-                    _ => quote! {
-                        compile_error!("Unsupported Vec Pattern");
-                    },
+                    _ => error_msg("Unsupported Vec Pattern"),
                 }
             } else {
                 // both typical types and user-defined structs are handled here
@@ -149,9 +141,7 @@ impl ArbitraryInit for TypePath {
                 }
             }
         } else {
-            quote! {
-                compile_error!("Failed to get the final segment of the path.");
-            }
+            error_msg("Failed to get the final segment of the path.")
         }
     }
 }
@@ -188,17 +178,16 @@ impl ArbitraryInit for TypeSlice {
 }
 
 impl ArbitraryInit for TypeReference {
-    fn init_for_type(&self, arg_name: &str, mutability: &Option<Mut>) -> proc_macro2::TokenStream {
+    fn init_for_type(&self, arg_name: &str, _mutability: &Option<Mut>) -> proc_macro2::TokenStream {
         let obj_name = quote::format_ident!("{}_obj", arg_name);
         let arg_ident = quote::format_ident!("{}", arg_name);
-        let is_mut = matches!(mutability, Some(_));
+        let mutability = self.mutability;
         let obj_init = self.elem.init_for_type(&obj_name.to_string(), &mutability);
         match self.elem.as_ref() {
             Type::Slice(_) => {
-                let slice_method = if is_mut {
-                    "kani::slice::any_slice_of_array_mut"
-                } else {
-                    "kani::slice::any_slice_of_array"
+                let slice_method = match mutability {
+                    Some(_) => "kani::slice::any_slice_of_array_mut",
+                    None => "kani::slice::any_slice_of_array",
                 };
                 let slice_method = syn::parse_str::<Path>(slice_method).unwrap();
                 quote! {
@@ -238,9 +227,7 @@ impl ArbitraryInit for Type {
             Type::Tuple(type_tuple) => type_tuple.init_for_type(arg_name, mutability),
             Type::Reference(type_ref) => type_ref.init_for_type(arg_name, mutability),
             Type::Ptr(type_ptr) => type_ptr.init_for_type(arg_name, mutability),
-            _ => quote! {
-                compile_error!("Unsupported argument type for `kani_test` macro.");
-            },
+            _ => error_msg("Unsupported argument type for `kani_test` macro."),
         }
     }
 }
@@ -272,10 +259,7 @@ pub fn kani_arbitrary(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let struct_def = match input {
         Item::Struct(ref struct_def) => struct_def,
         _ => {
-            return quote! {
-                compile_error!("`kani_arbitrary` can only be used on structs.");
-            }
-            .into();
+            return error_msg("`kani_arbitrary` can only be used on structs.").into();
         }
     };
     let impl_stmt = impl_arbitrary_via_fields(&struct_def);
@@ -335,10 +319,7 @@ pub fn extend_arbitrary(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_block = match input {
         Item::Impl(impl_block) => impl_block,
         _ => {
-            return quote! {
-                compile_error!("`extend_arbitrary` can only be used on impl blocks.");
-            }
-            .into();
+            return error_msg("`extend_arbitrary` can only be used on impl blocks.").into();
         }
     };
     let impl_stmt = impl_arbitrary_via_constructor(&impl_block);
@@ -373,10 +354,8 @@ fn impl_arbitrary_via_constructor(impl_block: &ItemImpl) -> Option<proc_macro2::
     let struct_name = match &*impl_block.self_ty {
         Type::Path(type_path) => type_path.path.get_ident()?,
         _ => {
-            return quote! {
-                compile_error!("`extend_arbitrary` can only be used on impl blocks of structs.");
-            }
-            .into();
+            return error_msg("`extend_arbitrary` can only be used on impl blocks of structs.")
+                .into();
         }
     };
     let constructor = find_constructor(impl_block, struct_name)?;
