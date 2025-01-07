@@ -17,6 +17,24 @@ fn error_msg(msg: &str) -> proc_macro2::TokenStream {
     }
 }
 #[proc_macro_attribute]
+/// Automatedly generate Kani one test harness for target function.
+/// The harness name is `check_{function_name}`.
+///
+/// # Example
+/// ```rust
+/// use autokani::kani_test;
+/// #[kani_test]
+/// pub fn multi_param(a: i16, b: u8, c: f32, d: bool) {
+///     let _ = a;
+///     let x = b as f32 + c ;
+///     if d {
+///         let y = b + c as u8;
+///     }
+/// }
+/// ```
+/// The above code will generate a test harness for the `multi_param` function.
+/// Run the harness with `cargo kani --harness check_multi_param`.
+/// The harness could find the possible arithmetic overflow in the function.
 pub fn kani_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as Item);
     let func = match input {
@@ -67,14 +85,7 @@ pub fn kani_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
     };
     harness_body.push(call_stmt);
     let harness_code = quote! {
-        #[cfg(kani)]
-        #[kani::proof]
-        #[kani::unwind(64)]
-        pub fn #harness_name() {
-            #(#harness_body)*
-        }
-        // Used for Debugging
-        #[cfg(all(not(kani), debug_assertions))]
+        #[cfg(any(kani, feature = "debug_log"))]
         #[kani::proof]
         #[kani::unwind(64)]
         pub fn #harness_name() {
@@ -296,8 +307,10 @@ impl ArbitraryInit for TypeTuple {
 }
 
 #[proc_macro_attribute]
-// Since some common structs do not impl `Arbitrary`, we do not derive `Arbitrary` for them.
-// Instead, we provide a macro to generate the impl block for `Arbitrary`.
+/// Impl `Arbitrary` for a struct by generating the `any` method based on the fields of the struct.
+/// 
+/// Since some common types (e.g., Vec) do not impl `Arbitrary`, it's inpractical to derive `Arbitrary`.
+/// Instead, this macro generates the impl block for `Arbitrary`.
 pub fn kani_arbitrary(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as Item);
     let struct_def = match input {
@@ -348,7 +361,7 @@ fn impl_arbitrary_via_fields(struct_def: &ItemStruct) -> proc_macro2::TokenStrea
         }
     };
     quote! {
-        #[cfg(kani)]
+        #[cfg(any(kani, feature = "debug_log"))]
         impl kani::Arbitrary for #struct_name {
             fn any() -> Self {
                 #init_stmt
@@ -357,6 +370,8 @@ fn impl_arbitrary_via_fields(struct_def: &ItemStruct) -> proc_macro2::TokenStrea
     }
 }
 
+/// Extend the `Arbitrary` trait for target struct based on its constructor(e.g., `new` method).
+/// Add this attribute to the impl block of the struct.
 #[proc_macro_attribute]
 pub fn extend_arbitrary(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as Item);
@@ -430,15 +445,7 @@ fn impl_arbitrary_via_constructor(impl_block: &ItemImpl) -> Option<proc_macro2::
         }
     }
     Some(quote! {
-        #[cfg(kani)]
-        impl kani::Arbitrary for #struct_name {
-            fn any() -> Self {
-                #(#init_code)*
-                Self::#func_name(#(#call_args),*)
-            }
-        }
-        // Used for Debugging
-        #[cfg(all(not(kani), debug_assertions))]
+        #[cfg(any(kani, feature = "debug_log"))]
         impl kani::Arbitrary for #struct_name {
             fn any() -> Self {
                 #(#init_code)*

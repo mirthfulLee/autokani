@@ -3,18 +3,22 @@
 
 use autokani::{kani_test, kani_arbitrary, extend_arbitrary};
 
-#[cfg(kani)]
-mod verification {
-    use super::*;
-
-    // #[kani::proof]
-    // pub fn test_ptr_input() {
-    //     let mut generator = kani::PointerGenerator::<{std::mem::size_of::<u32>()}>::new();
-    //     let ptr2: *const u32 = generator.any_alloc_status().ptr;
-    //     let _ = ptr_input(ptr2);
-    // }
+#[kani_test]
+pub fn u8_input(s: u8) {
+    let _ = s;
 }
-
+#[kani_test]
+pub fn i16_input(s: i16) {
+    let _ = s;
+}
+#[kani_test]
+pub fn f16_input(s: f32) {
+    let _ = s;
+}
+#[kani_test]
+pub fn bool_input(s: bool) {
+    let _ = s;
+}
 fn main() {
     println!("Hello, world!");
 }

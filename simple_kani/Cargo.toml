@@ -2,6 +2,7 @@
 name = "simple_kani"
 version = "0.1.0"
 edition = "2021"
+description = "Simple Kani examples"
 
 [dependencies]
 autokani = { path = "../autokani" }
