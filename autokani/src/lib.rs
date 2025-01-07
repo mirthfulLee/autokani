@@ -35,7 +35,7 @@ fn error_msg(msg: &str) -> proc_macro2::TokenStream {
 /// The above code will generate a test harness for the `multi_param` function.
 /// Run the harness with `cargo kani --harness check_multi_param`.
 /// The harness could find the possible arithmetic overflow in the function.
-pub fn kani_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn autokani_func(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as Item);
     let func = match input {
         Item::Fn(func) => func,
@@ -80,22 +80,96 @@ pub fn kani_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
     }
     call_path.push(quote! { #func_name });
 
-    let call_stmt = quote! {
-        let _ = #(#call_path).*(#(#call_args),*);
-    };
-    harness_body.push(call_stmt);
     let harness_code = quote! {
         #[cfg(any(kani, feature = "debug_log"))]
         #[kani::proof]
         #[kani::unwind(64)]
         pub fn #harness_name() {
             #(#harness_body)*
+            let _ = #(#call_path).*(#(#call_args),*);
         }
     };
     let output = quote! {
         #func
 
         #harness_code
+    };
+    output.into()
+}
+#[proc_macro_attribute]
+/// Automatedly generate Kani one test harness for target method.
+/// The harness name is `check_{method_name}`.
+///
+/// # Example
+/// ```rust
+/// use autokani::kani_test;
+/// struct Obj {
+///     a: u8,
+/// }
+/// impl Obj {
+/// #[kani_test]
+/// pub fn multi_param(&self, b: u8, c: f32, d: bool) {
+///     let x = b as f32 + c ;
+///     if d {
+///         self.a = b + c as u8;
+///     }
+/// }
+/// }
+/// ```
+/// The above code will generate a test harness for the `multi_param` function.
+/// Run the harness with `cargo kani --harness check_multi_param`.
+/// The harness could find the possible arithmetic overflow in the function.
+pub fn autokani_method(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as Item);
+    let func = match input {
+        Item::Fn(func) => func,
+        _ => {
+            return error_msg("`kani_test` can only be used on functions.").into();
+        }
+    };
+
+    let func_name = &func.sig.ident;
+    let inputs = &func.sig.inputs;
+    let harness_name = quote::format_ident!("check_{}", func_name);
+    let mut harness_body = Vec::new();
+    let mut call_args: Vec<proc_macro2::TokenStream> = Vec::new();
+
+    for arg in inputs {
+        match arg {
+            FnArg::Receiver(receiver) => {
+                let arg_placeholder = "self_receiver";
+                let init_stmt = receiver.init_for_type(arg_placeholder, &receiver.mutability);
+                harness_body.push(init_stmt);
+                let receiver_ident = quote::format_ident!("{}", arg_placeholder);
+                call_args.push(quote! { #receiver_ident });
+            }
+            FnArg::Typed(pat_type) => {
+                let arg_name = match &*pat_type.pat {
+                    syn::Pat::Ident(pat_ident) => pat_ident.ident.to_string(),
+                    _ => "arg".to_string(),
+                };
+                let arg_type = &pat_type.ty;
+                let mutability = match &*pat_type.pat {
+                    Pat::Ident(pat_ident) => pat_ident.mutability,
+                    _ => None,
+                };
+                let init_stmt = arg_type.init_for_type(&arg_name, &mutability);
+                harness_body.push(init_stmt);
+                let arg_ident = quote::format_ident!("{}", arg_name);
+                call_args.push(quote! { #arg_ident });
+            }
+        }
+    }
+    let output = quote! {
+        #func
+
+        #[cfg(any(kani, feature = "debug_log"))]
+        #[kani::proof]
+        #[kani::unwind(64)]
+        pub fn #harness_name() {
+            #(#harness_body)*
+            let _ = Self::#func_name(#(#call_args),*);
+        }
     };
     output.into()
 }

@@ -16,9 +16,12 @@ Add `#[kani_arbitrary]` to target struct or add `#[extend_arbitrary]` to the bas
 > `#[extend_arbitrary]` is more recommended for less false alarms.
 
 **Run the kani harness**:
+Add attribute `#[autokani_func]` to target function.
 
-1. Add `#[kani_test]` for target function
-2. Run `cargo kani --harness check_{function_name}` for specific target or `cargo kani` for all selected functions.
+> If the target function is inside a impl block and does not begin with a receiver (`self`), use `autokani_method` for compatibility.
+
+**Run the kani harness**:
+Run `cargo kani --harness check_{function_name}` for specific target or `cargo kani` for all selected functions.
 
 > If the code involves raw pointers, use `cargo kani -Z mem-predicates`.
 
