@@ -1,9 +1,9 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, token::Mut, AngleBracketedGenericArguments, FieldsNamed, FnArg, Ident,
-    ImplItem, ImplItemMethod, Item, ItemFn, ItemImpl, ItemStruct, Pat, Path, Receiver, ReturnType,
-    Type, TypeArray, TypePath, TypePtr, TypeReference, TypeSlice, TypeTuple,
+    parse_macro_input, token::Mut, AngleBracketedGenericArguments, FnArg, Ident, ImplItem,
+    ImplItemMethod, Item, ItemImpl, ItemStruct, Pat, Path, Receiver, ReturnType, Type, TypeArray,
+    TypePath, TypePtr, TypeReference, TypeSlice, TypeTuple,
 };
 
 const ARR_LIMIT: usize = 16;
@@ -359,7 +359,7 @@ fn impl_arbitrary_via_fields(struct_def: &ItemStruct) -> proc_macro2::TokenStrea
                 }
             }
         }
-        syn::Fields::Unnamed(fields) => {
+        syn::Fields::Unnamed(_fields) => {
             todo!("Fields::Unnamed");
         }
         syn::Fields::Unit => {
