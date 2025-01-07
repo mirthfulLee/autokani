@@ -1,6 +1,6 @@
 [package]
 name = "autokani"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 authors = ["Mirthfullee <lihuan0530@gmail.com>"]
 description = "A simple macro for generating kani harness."
