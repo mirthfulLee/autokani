@@ -26,3 +26,4 @@ Add `#[kani_arbitrary]` to target struct or add `#[extend_arbitrary]` to the bas
 2. Support Embedded Struct / Enum
 3. Support Unnamed Struct
 4. Optimization for default type initialization
+5. Support custom contracts(`requires` and `ensures`) and assumption(`assume`)

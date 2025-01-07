@@ -1,5 +1,2 @@
 [workspace]
-members = [
-    "autokani",    # 定义过程宏的 crate
-    "simple_kani", # 使用过程宏的 crate
-]
+members = ["autokani", "simple_kani"]
