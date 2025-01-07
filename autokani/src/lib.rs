@@ -167,13 +167,20 @@ impl ArbitraryInit for TypePath {
             } else if final_seg.ident == "Result" {
                 let result_type = inner_type.clone();
                 match result_type {
-                    syn::PathArguments::AngleBracketed(AngleBracketedGenericArguments{args,..}) => {
+                    syn::PathArguments::AngleBracketed(AngleBracketedGenericArguments {
+                        args,
+                        ..
+                    }) => {
                         let ok_init = match args.first() {
-                            Some(syn::GenericArgument::Type(ty)) => ty.init_for_type(arg_name, mutability),
+                            Some(syn::GenericArgument::Type(ty)) => {
+                                ty.init_for_type(arg_name, mutability)
+                            }
                             _ => error_msg("Unsupported Result Type"),
                         };
                         let err_init = match args.last() {
-                            Some(syn::GenericArgument::Type(ty)) => ty.init_for_type(arg_name, mutability),
+                            Some(syn::GenericArgument::Type(ty)) => {
+                                ty.init_for_type(arg_name, mutability)
+                            }
                             _ => error_msg("Unsupported Result Type"),
                         };
                         quote! {
@@ -259,16 +266,15 @@ impl ArbitraryInit for TypeReference {
 }
 
 impl ArbitraryInit for TypePtr {
-    fn init_for_type(&self, arg_name: &str, mutability: &Option<Mut>) -> proc_macro2::TokenStream {
-        let mutability = if mutability.is_some() {
-            quote!(mut)
-        } else {
-            quote!()
-        };
+    fn init_for_type(&self, arg_name: &str, _mutability: &Option<Mut>) -> proc_macro2::TokenStream {
         let arg_ident = quote::format_ident!("{}", arg_name);
+        let mutability = self.mutability;
+        let const_token = self.const_token;
+        let elem = &self.elem;
         quote! {
-            let mut generator = kani::PointerGenerator::<{std::mem::size_of::<#self.elem>()}>::new();
-            let #arg_ident: *#self.const_token #mutability #self.elem = generator.any_alloc_status().ptr;
+            const PTR_SIZE: usize = if std::mem::size_of::<#elem>() > 0 {std::mem::size_of::<#elem>()} else {1};
+            let mut generator = kani::PointerGenerator::<PTR_SIZE>::new();
+            let #arg_ident: *#const_token #mutability #elem = generator.any_alloc_status().ptr;
         }
     }
 }
@@ -308,7 +314,7 @@ impl ArbitraryInit for TypeTuple {
 
 #[proc_macro_attribute]
 /// Impl `Arbitrary` for a struct by generating the `any` method based on the fields of the struct.
-/// 
+///
 /// Since some common types (e.g., Vec) do not impl `Arbitrary`, it's inpractical to derive `Arbitrary`.
 /// Instead, this macro generates the impl block for `Arbitrary`.
 pub fn kani_arbitrary(_attr: TokenStream, item: TokenStream) -> TokenStream {

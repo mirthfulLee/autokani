@@ -20,6 +20,8 @@ Add `#[kani_arbitrary]` to target struct or add `#[extend_arbitrary]` to the bas
 1. Add `#[kani_test]` for target function
 2. Run `cargo kani --harness check_{function_name}` for specific target or `cargo kani` for all selected functions.
 
+> If the code involves raw pointers, use `cargo kani -Z mem-predicates`.
+
 ## TODOs
 
 1. Functions with Generic

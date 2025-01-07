@@ -1,3 +1,8 @@
+// mod aaa;
+// mod backup;
+
+use autokani::{extend_arbitrary, kani_arbitrary, kani_test};
+
 //// Basic Types //////////////////////////////////////////////
 #[kani_test]
 pub fn u8_input(s: u8) {
@@ -45,12 +50,12 @@ pub fn char_to_str(stream: &[u8]) -> String {
 }
 
 #[kani_test]
-pub fn slice_input(stream: [u8; 10]) -> String {
+pub fn arr_input(stream: [u8; 10]) -> String {
     unsafe { String::from_utf8_unchecked(stream.to_vec()) }
 }
 
 #[kani_test]
-pub fn slice_input2(stream: &[i32; 10]) {
+pub fn arr_input2(stream: &[i32; 10]) {
     let _ = stream;
 }
 
@@ -67,7 +72,7 @@ pub fn slice_input3(stream: &[i32]) {
 //// Tuple //////////////////////////////////////////////
 
 #[kani_test]
-pub fn multi_param(a: (i16, u8), c: f32, d: bool) {
+pub fn tuple_input(a: (i16, u8), c: f32, d: bool) {
     let _ = a;
     let x = a.0 as f32 + c ;
     if d {
@@ -76,7 +81,7 @@ pub fn multi_param(a: (i16, u8), c: f32, d: bool) {
 }
 
 #[kani_test]
-pub fn multi_param1(a: (i16, u8), c: f32, v: &[u8]) {
+pub fn tuple_input1(a: (i16, u8), c: f32, v: &[u8]) {
     let _ = a;
     let x = a.0 as f32 + c ;
     let y = a.1 + c as u8;
@@ -87,12 +92,12 @@ pub fn multi_param1(a: (i16, u8), c: f32, v: &[u8]) {
 //// Vec //////////////////////////////////////////////
 
 #[kani_test]
-pub fn to_str(stream: Vec<u8>) -> String {
+pub fn vec_input(stream: Vec<u8>) -> String {
     unsafe { String::from_utf8_unchecked(stream) }
 }
 
 #[kani_test]
-pub fn multi_param1(a: (i16, u8), b: f32, v: Vec<i32>) {
+pub fn vec_input1(a: (i16, u8), b: f32, v: Vec<i32>) {
     let y = a.1 + b as u8;
     let _ = v[y as usize];
 }
@@ -104,20 +109,15 @@ pub fn to_str(stream: &Vec<i16>) {
 }
 
 #[kani_test]
-pub fn multi_param1(a: (i16, u8), b: &f32, v: Vec<i32>) {
+pub fn ref_input1(a: (i16, u8), b: &f32, v: Vec<i32>) {
     let y = a.1 + *b as u8;
     let _ = v[y as usize];
-}
-
-#[kani_test]
-pub fn char_to_str2(stream: (u32, char), a: &f32) {
-    let _ = a;
 }
 
 //// Mutability //////////////////////////////////////////////
 
 #[kani_test]
-pub fn u8_input(s:&mut u8) {
+pub fn mut_u8_input(s:&mut u8) {
     let _ = s;
 }
 
@@ -150,7 +150,11 @@ pub fn initialize_prefix(length: usize, buffer: &mut [u8]) {
 //// Raw Pointer //////////////////////////////////////////////
 
 #[kani_test]
-pub fn ptr_input(s: *const u32) {
+pub fn ptr_input(s: *const ()) {
+    let _ = s;
+}
+#[kani_test]
+pub fn ptr_input1(s: *const u32) {
     let _ = s;
 }
 #[kani_test]
@@ -259,4 +263,8 @@ pub fn result_input(a: (i16, u8), b: &mut f32, v: &mut Result<Vec<i32>, i32>) {
         }
         Err(_) => {}
     }
+}
+
+fn main() {
+    println!("Hello, world!");
 }
